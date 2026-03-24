@@ -1,5 +1,8 @@
 import NextAuth from 'next-auth';
+import type { Session } from 'next-auth';
+import { getToken } from 'next-auth/jwt';
 import Credentials from 'next-auth/providers/credentials';
+import { headers } from 'next/headers';
 import { requestLogin, refreshOnce } from '../api/auth';
 import z from 'zod';
 
@@ -8,7 +11,7 @@ const loginSchema = z.object({
   password: z.string().min(1)
 });
 
-export const { handlers, signIn, auth, signOut } = NextAuth({
+export const { handlers, signIn, auth, signOut, unstable_update } = NextAuth({
   pages: {
     signIn: '/login'
   },
@@ -50,7 +53,7 @@ export const { handlers, signIn, auth, signOut } = NextAuth({
   ],
 
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
       if (user) {
         token.role = user.role;
         token.accessToken = user.accessToken;
@@ -61,6 +64,24 @@ export const { handlers, signIn, auth, signOut } = NextAuth({
         token.refreshToken = user.refreshToken ?? null;
         token.refreshTokenExpiresAt = user.refreshTokenExpiresAt ?? null;
         token.refreshError = null;
+      }
+
+      if (trigger === 'update' && session) {
+        if ('accessToken' in session) {
+          token.accessToken = session.accessToken;
+        }
+        if ('accessTokenExpiresAt' in session) {
+          token.accessTokenExpiresAt = session.accessTokenExpiresAt;
+        }
+        if ('refreshToken' in session) {
+          token.refreshToken = session.refreshToken;
+        }
+        if ('refreshTokenExpiresAt' in session) {
+          token.refreshTokenExpiresAt = session.refreshTokenExpiresAt;
+        }
+        if ('refreshError' in session) {
+          token.refreshError = session.refreshError;
+        }
       }
 
       const now = Date.now();
@@ -82,28 +103,10 @@ export const { handlers, signIn, auth, signOut } = NextAuth({
         };
       }
 
-      try {
-        const { accessToken, expiresIn, refreshToken, refreshExpiresIn } =
-          await refreshOnce(token.refreshToken);
-
-        return {
-          ...token,
-          accessToken: accessToken ?? token.accessToken,
-          accessTokenExpiresAt: Date.now() + expiresIn * 1000,
-          refreshToken: refreshToken ?? token.refreshToken,
-          refreshTokenExpiresAt: Date.now() + refreshExpiresIn * 1000,
-          refreshError: null
-        };
-      } catch {
-        return {
-          ...token,
-          accessToken: undefined,
-          accessTokenExpiresAt: null,
-          refreshToken: null,
-          refreshTokenExpiresAt: null,
-          refreshError: 'RefreshAccessTokenError'
-        };
-      }
+      return {
+        ...token,
+        refreshError: null
+      };
     },
 
     session({ token, session }) {
@@ -118,3 +121,96 @@ export const { handlers, signIn, auth, signOut } = NextAuth({
     }
   }
 });
+
+async function getJwtPayload() {
+  const secret = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET;
+
+  if (!secret) {
+    throw new Error('Missing auth secret');
+  }
+
+  const requestHeaders = await headers();
+
+  return getToken({
+    req: { headers: requestHeaders },
+    secret
+  });
+}
+
+function buildSessionUpdate(data: Partial<Session>): Partial<Session> {
+  return data;
+}
+
+export async function authWithRefresh() {
+  const session = await auth();
+  const token = await getJwtPayload();
+
+  if (!session || !token) return session;
+
+  const now = Date.now();
+  const accessTokenExpiresAt = token.accessTokenExpiresAt ?? 0;
+  const refreshTokenExpiresAt = token.refreshTokenExpiresAt ?? 0;
+
+  if (token.accessToken && now < accessTokenExpiresAt - 2000) {
+    return {
+      ...session,
+      accessToken: token.accessToken,
+      refreshError: token.refreshError ?? null
+    };
+  }
+
+  if (!token.refreshToken || now >= refreshTokenExpiresAt - 2000) {
+    await unstable_update(
+      buildSessionUpdate({
+        accessToken: undefined,
+        accessTokenExpiresAt: null,
+        refreshToken: null,
+        refreshTokenExpiresAt: null,
+        refreshError: 'RefreshTokenExpired'
+      })
+    );
+
+    return {
+      ...session,
+      accessToken: undefined,
+      refreshError: 'RefreshTokenExpired'
+    };
+  }
+
+  try {
+    const { accessToken, expiresIn, refreshToken, refreshExpiresIn } =
+      await refreshOnce(token.refreshToken);
+
+    await unstable_update(
+      buildSessionUpdate({
+        accessToken,
+        accessTokenExpiresAt: Date.now() + expiresIn * 1000,
+        refreshToken,
+        refreshTokenExpiresAt: Date.now() + refreshExpiresIn * 1000,
+        refreshError: null
+      })
+    );
+
+    return {
+      ...session,
+      accessToken,
+      refreshError: null
+    };
+  } catch {
+    await unstable_update(
+      buildSessionUpdate({
+        accessToken: undefined,
+        accessTokenExpiresAt: null,
+        refreshToken: null,
+        refreshTokenExpiresAt: null,
+        refreshError: 'RefreshAccessTokenError'
+      })
+    );
+
+    return {
+      ...session,
+      accessToken: undefined,
+      refreshError: 'RefreshAccessTokenError'
+    };
+  }
+}

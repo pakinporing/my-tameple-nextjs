@@ -1,9 +1,9 @@
 'use server';
 
-import { auth, signOut } from '@/libs/auth/auth';
+import { authWithRefresh, signOut } from '@/libs/auth/auth';
 
 export async function getMeAction() {
-  const session = await auth();
+  const session = await authWithRefresh();
   if (!session?.accessToken || session.refreshError) {
     await signOut({ redirectTo: '/login' });
     throw new Error('Unauthorized');

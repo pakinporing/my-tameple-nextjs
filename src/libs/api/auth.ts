@@ -57,6 +57,7 @@ export async function requestLogin(
 export async function requestRefresh(
   refreshToken: string
 ): Promise<RefreshResponseData> {
+  console.log('runnnnnnnnnnnnnnnn');
   const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
