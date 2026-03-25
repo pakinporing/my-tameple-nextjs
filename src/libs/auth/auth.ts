@@ -3,7 +3,7 @@ import type { Session } from 'next-auth';
 import { getToken } from 'next-auth/jwt';
 import Credentials from 'next-auth/providers/credentials';
 import { headers } from 'next/headers';
-import { requestLogin, refreshOnce } from '../api/auth';
+import { requestLogin, refreshOnce, requestRefresh } from '../api/auth';
 import z from 'zod';
 
 const loginSchema = z.object({
@@ -65,7 +65,7 @@ export const { handlers, signIn, auth, signOut, unstable_update } = NextAuth({
         token.refreshTokenExpiresAt = user.refreshTokenExpiresAt ?? null;
         token.refreshError = null;
       }
-
+      console.log('session 9999999', session);
       if (trigger === 'update' && session) {
         if ('accessToken' in session) {
           token.accessToken = session.accessToken;
@@ -160,6 +160,7 @@ export async function authWithRefresh() {
   }
 
   if (!token.refreshToken || now >= refreshTokenExpiresAt - 2000) {
+    console.log('in.    163 !!!!!!');
     await unstable_update(
       buildSessionUpdate({
         accessToken: undefined,
@@ -179,7 +180,7 @@ export async function authWithRefresh() {
 
   try {
     const { accessToken, expiresIn, refreshToken, refreshExpiresIn } =
-      await refreshOnce(token.refreshToken);
+      await requestRefresh(token.refreshToken);
 
     await unstable_update(
       buildSessionUpdate({
