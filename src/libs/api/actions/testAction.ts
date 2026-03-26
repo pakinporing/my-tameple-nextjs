@@ -5,6 +5,7 @@ import { authWithRefresh, signOut } from '@/libs/auth/auth';
 export async function getMeAction() {
   const session = await authWithRefresh();
   if (!session?.accessToken || session.refreshError) {
+    console.log('First 401 !!!!!!!!!!');
     await signOut({ redirectTo: '/login' });
     throw new Error('Unauthorized');
   }
@@ -18,6 +19,7 @@ export async function getMeAction() {
 
   if (!res.ok) {
     if (res.status === 401) {
+      console.log('เข้า 401 !!!!!!!!!!');
       await signOut({ redirectTo: '/login' });
       throw new Error('Unauthorized');
     }

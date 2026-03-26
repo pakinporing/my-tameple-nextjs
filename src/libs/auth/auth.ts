@@ -67,6 +67,7 @@ export const { handlers, signIn, auth, signOut, unstable_update } = NextAuth({
       }
       console.log('session 9999999', session);
       if (trigger === 'update' && session) {
+        console.log('  if (trigger === update && session) !!!!!!!!');
         if ('accessToken' in session) {
           token.accessToken = session.accessToken;
         }
