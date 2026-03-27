@@ -1,4 +1,6 @@
+import Link from 'next/link';
 import TestButton from '../components/TestActionButton';
+import TestStripeButton from '../components/TestStripeButton';
 
 export default function Home() {
   return (
@@ -6,6 +8,7 @@ export default function Home() {
       <h1>Home Page</h1>
 
       <TestButton />
+      <TestStripeButton />
     </div>
   );
 }
